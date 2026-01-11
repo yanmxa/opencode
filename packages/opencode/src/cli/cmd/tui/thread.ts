@@ -9,6 +9,9 @@ import { Log } from "@/util/log"
 import { withNetworkOptions, resolveNetworkOptions } from "@/cli/network"
 import type { Event } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
+import { createOpencodeClient } from "@opencode-ai/sdk/v2"
+import { sessionPicker } from "@/cli/cmd/session-picker"
+import { Terminal } from "@/cli/cmd/tui/util/terminal"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -63,6 +66,11 @@ export const TuiThreadCommand = cmd({
       .option("continue", {
         alias: ["c"],
         describe: "continue the last session",
+        type: "boolean",
+      })
+      .option("resume", {
+        alias: ["r"],
+        describe: "resume a session from a list",
         type: "boolean",
       })
       .option("session", {
@@ -149,13 +157,34 @@ export const TuiThreadCommand = cmd({
       events = createEventSource(client, cwd)
     }
 
+    // Detect terminal background color once, before any TUI rendering
+    const terminalMode = await Terminal.getTerminalBackgroundColor()
+
+    // Handle --resume: show TUI session picker before main TUI starts
+    let selectedSessionID = args.session
+    if (args.resume && !selectedSessionID) {
+      const sdk = createOpencodeClient({ baseUrl: url, fetch: customFetch })
+
+      // Show fzf-style session picker
+      const pickedSessionID = await sessionPicker(sdk, terminalMode)
+
+      if (!pickedSessionID) {
+        // User cancelled or no sessions
+        await client.call("shutdown", undefined)
+        process.exit(0)
+      }
+
+      selectedSessionID = pickedSessionID
+    }
+
     const tuiPromise = tui({
       url,
       fetch: customFetch,
       events,
+      mode: terminalMode,
       args: {
         continue: args.continue,
-        sessionID: args.session,
+        sessionID: selectedSessionID,
         agent: args.agent,
         model: args.model,
         prompt,

@@ -106,10 +106,11 @@ export function tui(input: {
   fetch?: typeof fetch
   events?: EventSource
   onExit?: () => Promise<void>
+  mode?: "dark" | "light"
 }) {
   // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
-    const mode = await getTerminalBackgroundColor()
+    const mode = input.mode ?? (await getTerminalBackgroundColor())
     const onExit = async () => {
       await input.onExit?.()
       resolve()
